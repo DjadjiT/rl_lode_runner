@@ -66,8 +66,6 @@ class MyGame(arcade.Window):
         self.exit_list = arcade.SpriteList()
         self.enemy_list = arcade.SpriteList()
         self.player_list = arcade.SpriteList()
-        print(SPRITE_SIZE * SCREEN_GRID_WIDTH - SPRITE_SIZE / 2)
-        print(SPRITE_SIZE / 2)
 
         self.grounds_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="grounds", scaling=0.5,
                                                          use_spatial_hash=True)
@@ -77,6 +75,8 @@ class MyGame(arcade.Window):
                                                       use_spatial_hash=True)
         self.exit_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="exit", scaling=0.5,
                                                       use_spatial_hash=True)
+        self.enemy_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="enemy", scaling=0.5,
+                                                       use_spatial_hash=True)
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(self.player_sprite,
                                                              self.grounds_list,
@@ -97,12 +97,13 @@ class MyGame(arcade.Window):
         self.keys_list.draw()
         self.exit_list.draw()
         self.player_list.draw()
+        self.enemy_list.draw()
 
     def on_update(self, delta_time):
         self.grounds_list.update()
         self.physics_engine.update()
         self.player_list.update()
-        print(self.player_sprite.center_x)
+        self.enemy_list.update()
 
         key_hit_list = arcade.check_for_collision_with_list(self.player_sprite,
                                                             self.keys_list)
@@ -113,6 +114,9 @@ class MyGame(arcade.Window):
 
         if len(arcade.check_for_collision_with_list(self.player_sprite, self.enemy_list)) > 0:
             self.setup()
+
+        for enemy in self.enemy_list:
+            self.move_towards_player(enemy)
 
         exit_collision = len(arcade.check_for_collision_with_list(self.player_sprite, self.exit_list)) > 0
         if exit_collision and len(self.keys_list) == 0:
