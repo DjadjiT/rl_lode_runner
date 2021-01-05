@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.4" tiledversion="1.4.3" orientation="orthogonal" renderorder="right-down" width="15" height="8" tilewidth="128" tileheight="128" infinite="0" nextlayerid="9" nextobjectid="1">
+ <tileset firstgid="1" source="my_tileset.tsx"/>
+ <layer id="1" name="grounds" width="15" height="8" locked="1">
+  <data encoding="base64" compression="zlib">
+   eJxjYKAMMEIxseqIUUuMWdjsp4b5uNyJbie17MMHmCnALFAMABtIAEc=
+  </data>
+ </layer>
+ <layer id="2" name="ladders" width="15" height="8">
+  <data encoding="base64" compression="zlib">
+   eJxjYIAAJgKYjYF8QA+92NRRopcWeqihl1QAAFGAAEE=
+  </data>
+ </layer>
+ <layer id="5" name="exit" width="15" height="8" locked="1">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgFtAbsA2g3AAVEAAg=
+  </data>
+ </layer>
+ <layer id="3" name="keys" width="15" height="8" locked="1">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgYwEqmHLUBPe0aCAAAE8QAEA==
+  </data>
+ </layer>
+ <layer id="6" name="enemy" width="15" height="8" locked="1">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgFtAQcNFJLLAAACIAAEQ==
+  </data>
+ </layer>
+</map>
