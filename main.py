@@ -1,8 +1,5 @@
-import math
-from typing import Optional
 import arcade
 
-# How big are our image tiles?
 SPRITE_IMAGE_SIZE = 128
 
 PLAYER_MOVEMENT_SPEED = 5
@@ -16,13 +13,35 @@ SPRITE_SCALING_TILES = 0.5
 SPRITE_SIZE = int(SPRITE_IMAGE_SIZE * SPRITE_SCALING_PLAYER)
 
 # Size of grid to show on screen, in number of tiles
-SCREEN_GRID_WIDTH = 15
-SCREEN_GRID_HEIGHT = 8
+SCREEN_GRID_TILE_WIDTH = 15
+SCREEN_GRID_TILE_HEIGHT = 8
 
-# Size of screen to show, in pixels
-SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_WIDTH
-SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_HEIGHT
+SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
+SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
+
+REWARD_GOAL = 60
+REWARD_KEY = 10
+REWARD_DEFAULT = -1
+REWARD_STUCK = -6
+REWARD_IMPOSSIBLE = -60
+
+DEFAULT_LEARNING_RATE = 1
+DEFAULT_DISCOUNT_FACTOR = 0.5
+
+UP, DOWN, LEFT, RIGHT = 'U', 'D', 'L', 'R'
+ACTIONS = [UP, DOWN, LEFT, RIGHT]
+
+MAZE = """
+  --------#    
+ __       #___ 
+c      c  #    
+_  __#__  #    
+    c#  ___   _
+  _#__        *
+ p #         __
+_______________ 
+"""
 
 
 class Environment:
@@ -32,9 +51,116 @@ class Environment:
 
         self.height = len(lines)
         self.width = len(lines[0])
-        self.wall = []
-        self.ladder = []
-        self.ground = []
+        self.starting_point = (None, None)
+        self.grounds = []
+        self.ladders = []
+        self.zipLines = []
+        self.keys = []
+        self.exit = []
+
+        for row in range(self.height):
+            for col in range(len(lines[row])):
+                self.states[(row, col)] = lines[row][col]
+                if lines[row][col] == 'p':
+                    self.starting_point = (row, col)
+                elif lines[row][col] == '*':
+                    self.exit = (row, col)
+                elif lines[row][col] == '#':
+                    self.ladders = (row, col)
+                elif lines[row][col] == '_':
+                    self.grounds = (row, col)
+                elif lines[row][col] == '-':
+                    self.zipLines = (row, col)
+                elif lines[row][col] == 'c':
+                    self.keys = (row, col)
+
+    def apply(self, state, action):
+        new_state = (0, 0)
+        if action == UP:
+            new_state = (state[0] - 1, state[1])
+        elif action == DOWN:
+            new_state = (state[0] + 1, state[1])
+        elif action == LEFT:
+            new_state = (state[0], state[1] - 1)
+        elif action == RIGHT:
+            new_state = (state[0], state[1] + 1)
+
+        if new_state in self.states:
+            # calculer la récompense
+            if self.states[new_state] in ['_']:
+                reward = REWARD_STUCK
+            elif self.states[new_state] in ['*']:  # Sortie du labyrinthe : grosse récompense
+                reward = REWARD_GOAL
+            else:
+                reward = REWARD_DEFAULT
+        else:
+            # Etat impossible: grosse pénalité
+            new_state = state
+            reward = REWARD_IMPOSSIBLE
+
+        return new_state, reward
+
+
+class Agent:
+    def __init__(self, env: Environment):
+        self.environment = env
+        self.policy = Policy(env.states.keys(), ACTIONS)
+        self.state = None
+        self.score = 0
+        self.previous_state = None
+        self.reward = None
+        self.last_action = None
+        self.reset()
+
+    def reset(self):
+        self.state = self.environment.starting_point
+        self.previous_state = self.state
+        self.score = 0
+
+    def best_action(self):
+        return self.policy.best_action(self.state)
+
+    def do(self, action):
+        self.previous_state = self.state
+        self.state, self.reward = self.environment.apply(self.state, action)
+        self.score += self.reward
+        self.last_action = action
+
+    def update_policy(self):
+        self.policy.update(self.previous_state, self.state, self.last_action, self.reward)
+
+
+class Policy:  # Q-table
+    def __init__(self, states, actions,
+                 learning_rate=DEFAULT_LEARNING_RATE,
+                 discount_factor=DEFAULT_DISCOUNT_FACTOR):
+        self.table = {}
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        for s in states:
+            self.table[s] = {}
+            for a in actions:
+                self.table[s][a] = 0
+
+    def __repr__(self):
+        res = ''
+        for state in self.table:
+            res += f'{state}\t{self.table[state]}\n'
+        return res
+
+    def best_action(self, state):
+        action = None
+        for a in self.table[state]:
+            if action is None or self.table[state][a] > self.table[state][action]:
+                action = a
+        return action
+
+    def update(self, previous_state, state, last_action, reward):
+        # Q(st, at) = Q(st, at) + learning_rate * (reward + discount_factor * max(Q(state)) - Q(st, at))
+        max_q = max(self.table[state].values())
+        self.table[previous_state][last_action] += self.learning_rate * \
+                                                   (reward + self.discount_factor * max_q - self.table[previous_state][
+                                                       last_action])
 
 
 class MyGame(arcade.Window):
@@ -66,8 +192,6 @@ class MyGame(arcade.Window):
         self.exit_list = arcade.SpriteList()
         self.enemy_list = arcade.SpriteList()
         self.player_list = arcade.SpriteList()
-        print(SPRITE_SIZE * SCREEN_GRID_WIDTH - SPRITE_SIZE / 2)
-        print(SPRITE_SIZE / 2)
 
         self.grounds_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="grounds", scaling=0.5,
                                                          use_spatial_hash=True)
@@ -102,7 +226,6 @@ class MyGame(arcade.Window):
         self.grounds_list.update()
         self.physics_engine.update()
         self.player_list.update()
-        print(self.player_sprite.center_x)
 
         key_hit_list = arcade.check_for_collision_with_list(self.player_sprite,
                                                             self.keys_list)
@@ -167,7 +290,7 @@ class MyGame(arcade.Window):
         pass
 
     def is_on_the_right_edges(self):
-        return self.player_sprite.center_x > (SPRITE_SIZE * SCREEN_GRID_WIDTH - SPRITE_SIZE / 2)
+        return self.player_sprite.center_x > (SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH - SPRITE_SIZE / 2)
 
     def is_on_the_left_edges(self):
         return self.player_sprite.center_x < (SPRITE_SIZE / 2)
@@ -182,6 +305,7 @@ class MyGame(arcade.Window):
 
 def main():
     """ Main method """
+
     game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     game.setup()
     arcade.run()
