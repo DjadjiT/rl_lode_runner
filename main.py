@@ -21,7 +21,7 @@ SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
 REWARD_GOAL = 60
-REWARD_KEY = 10
+REWARD_KEY = 30
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -52,11 +52,9 @@ class Environment:
         self.height = len(lines)
         self.width = len(lines[0])
         self.starting_point = (None, None)
-        self.grounds = []
-        self.ladders = []
-        self.zipLines = []
         self.keys = []
         self.exit = []
+        self.keys_taken = 0
 
         for row in range(self.height):
             for col in range(len(lines[row])):
@@ -65,14 +63,8 @@ class Environment:
                     self.starting_point = (row, col)
                 elif lines[row][col] == '*':
                     self.exit = (row, col)
-                elif lines[row][col] == '#':
-                    self.ladders = (row, col)
-                elif lines[row][col] == '_':
-                    self.grounds = (row, col)
-                elif lines[row][col] == '-':
-                    self.zipLines = (row, col)
                 elif lines[row][col] == 'c':
-                    self.keys = (row, col)
+                    self.keys.append((row, col))
 
     def apply(self, state, action):
         new_state = (0, 0)
@@ -89,8 +81,12 @@ class Environment:
             # calculer la récompense
             if self.states[new_state] in ['_']:
                 reward = REWARD_STUCK
-            elif self.states[new_state] in ['*']:  # Sortie du labyrinthe : grosse récompense
+            elif self.states[new_state] in ['*'] and self.map_is_done():  # Sortie du labyrinthe : grosse récompense
                 reward = REWARD_GOAL
+            elif self.states[new_state] in ['c']:
+                self.states[new_state] = " "
+                self.keys_taken += 1
+                reward = REWARD_KEY
             else:
                 reward = REWARD_DEFAULT
         else:
@@ -99,6 +95,9 @@ class Environment:
             reward = REWARD_IMPOSSIBLE
 
         return new_state, reward
+
+    def map_is_done(self):
+        return self.keys_taken == len(self.keys)
 
 
 class Agent:
@@ -116,6 +115,7 @@ class Agent:
         self.state = self.environment.starting_point
         self.previous_state = self.state
         self.score = 0
+        self.environment.keys_taken = 0
 
     def best_action(self):
         return self.policy.best_action(self.state)
@@ -305,10 +305,32 @@ class MyGame(arcade.Window):
 
 def main():
     """ Main method """
+    env = Environment(MAZE)
+    agent = Agent(env)
 
-    game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    game.setup()
-    arcade.run()
+    # Boucle principale
+    for i in range(30):
+        agent.reset()
+
+        # Tant que l'agent n'est pas sorti du labyrinthe
+        step = 1
+        while (agent.state != env.exit) and not agent.environment.map_is_done():
+            # Choisir la meilleure action de l'agent
+            action = agent.best_action()
+
+            # Obtenir le nouvel état de l'agent et sa récompense
+            agent.do(action)
+            print('#', step, 'ACTION:', action, 'STATE:', agent.previous_state, '->', agent.state, 'SCORE:',
+                  agent.score)
+            step += 1
+
+            # A partir de St, St+1, at, rt+1, on met à jour la politique (policy, q-table, etc.)
+            agent.update_policy()
+            # print(agent.policy)
+        print('----')
+    # game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+    # game.setup()
+    # arcade.run()
 
 
 if __name__ == "__main__":
