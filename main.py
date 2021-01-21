@@ -165,9 +165,11 @@ class Policy:  # Q-table
 
 class MyGame(arcade.Window):
 
-    def __init__(self, width, height, title):
+    def __init__(self, width, height, title, agent):
         super().__init__(width, height, title)
         arcade.set_background_color(arcade.color.AMAZON)
+
+        self.agent = agent
 
         self.grounds_list = None
         self.ladders_list = None
@@ -221,6 +223,7 @@ class MyGame(arcade.Window):
         self.keys_list.draw()
         self.exit_list.draw()
         self.player_list.draw()
+        arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_update(self, delta_time):
         self.grounds_list.update()
@@ -242,21 +245,30 @@ class MyGame(arcade.Window):
             self.setup()
         elif exit_collision and len(self.keys_list) != 0:
             print("level not finished")
+        else:
+            action = self.agent.best_action()
+            self.agent.do(action)
+            self.agent.update_policy()
+            self.update_player()
+
+    def update_player(self):
+        self.player_sprite.center_x = self.agent.state[1] * self.player_sprite.width + self.player_sprite.width * 0.5
+        self.player_sprite.center_y = self.height - (self.agent.state[0] * self.player_sprite.width + self.player_sprite.width * 0.5)
 
     def on_key_press(self, key, modifiers):
-        if key == arcade.key.UP or key == arcade.key.W:
+        if self.agent.best_action == UP:
             if self.physics_engine.is_on_ladder():
                 self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
-        elif key == arcade.key.DOWN or key == arcade.key.S:
+        elif self.agent.best_action == DOWN:
             if self.physics_engine.is_on_ladder():
                 self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and (not self.is_on_the_left_edges()):
+        elif (self.agent.best_action == LEFT) and (not self.is_on_the_left_edges()):
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and (not self.is_on_the_right_edges()):
+        elif (self.agent.best_action == RIGHT) and (not self.is_on_the_right_edges()):
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and self.physics_engine.is_on_ladder():
+        elif (self.agent.best_action == SPRITE_SCALING_TILES) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and self.physics_engine.is_on_ladder():
+        elif (self.agent.best_action == RIGHT) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_release(self, key, modifiers):
@@ -307,30 +319,9 @@ def main():
     """ Main method """
     env = Environment(MAZE)
     agent = Agent(env)
-
-    # Boucle principale
-    for i in range(30):
-        agent.reset()
-
-        # Tant que l'agent n'est pas sorti du labyrinthe
-        step = 1
-        while (agent.state != env.exit) and not agent.environment.map_is_done():
-            # Choisir la meilleure action de l'agent
-            action = agent.best_action()
-
-            # Obtenir le nouvel état de l'agent et sa récompense
-            agent.do(action)
-            print('#', step, 'ACTION:', action, 'STATE:', agent.previous_state, '->', agent.state, 'SCORE:',
-                  agent.score)
-            step += 1
-
-            # A partir de St, St+1, at, rt+1, on met à jour la politique (policy, q-table, etc.)
-            agent.update_policy()
-            # print(agent.policy)
-        print('----')
-    # game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    # game.setup()
-    # arcade.run()
+    game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, agent)
+    game.setup()
+    arcade.run()
 
 
 if __name__ == "__main__":
