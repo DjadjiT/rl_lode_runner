@@ -21,9 +21,10 @@ SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
 REWARD_GOAL = 60
-REWARD_KEY = 30
+#REWARD_KEY = 30
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
+REWARD_FALL = 0
 REWARD_IMPOSSIBLE = -60
 
 DEFAULT_LEARNING_RATE = 1
@@ -47,23 +48,26 @@ _______________
 class Environment:
     def __init__(self, text):
         self.states = {}
-        lines = text.strip().split('\n')
+        self.lines = text.strip().split('\n')
 
-        self.height = len(lines)
-        self.width = len(lines[0])
+        self.height = len(self.lines)
+        self.width = len(self.lines[0])
+        self.init_map()
+
+    def init_map(self):
         self.starting_point = (None, None)
         self.keys = []
         self.exit = []
         self.keys_taken = 0
 
         for row in range(self.height):
-            for col in range(len(lines[row])):
-                self.states[(row, col)] = lines[row][col]
-                if lines[row][col] == 'p':
+            for col in range(len(self.lines[row])):
+                self.states[(row, col)] = self.lines[row][col]
+                if self.lines[row][col] == 'p':
                     self.starting_point = (row, col)
-                elif lines[row][col] == '*':
-                    self.exit = (row, col)
-                elif lines[row][col] == 'c':
+                #elif self.lines[row][col] == '*':
+                    #self.exit = (row, col)
+                elif self.lines[row][col] == 'c':
                     self.keys.append((row, col))
 
     def apply(self, state, action):
@@ -81,12 +85,12 @@ class Environment:
             # calculer la récompense
             if self.states[new_state] in ['_']:
                 reward = REWARD_STUCK
-            elif self.states[new_state] in ['*'] and self.map_is_done():  # Sortie du labyrinthe : grosse récompense
-                reward = REWARD_GOAL
-            elif self.states[new_state] in ['c']:
+            #elif self.states[new_state] in ['*'] and self.map_is_done():  # Sortie du labyrinthe : grosse récompense
+
+            elif self.states[new_state] in ['c'] and not self.map_is_done():
                 self.states[new_state] = " "
                 self.keys_taken += 1
-                reward = REWARD_KEY
+                reward = REWARD_GOAL
             else:
                 reward = REWARD_DEFAULT
         else:
@@ -112,6 +116,7 @@ class Agent:
         self.reset()
 
     def reset(self):
+        self.environment.init_map()
         self.state = self.environment.starting_point
         self.previous_state = self.state
         self.score = 0
@@ -309,8 +314,9 @@ def main():
     agent = Agent(env)
 
     # Boucle principale
-    for i in range(30):
+    for i in range(50):
         agent.reset()
+
 
         # Tant que l'agent n'est pas sorti du labyrinthe
         step = 1
