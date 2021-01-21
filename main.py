@@ -18,7 +18,7 @@ SCREEN_GRID_TILE_HEIGHT = 8
 
 SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
-SCREEN_TITLE = "Lode Runner RL"
+SCREEN_TITLE = "Lone Runner"
 
 REWARD_GOAL = 60
 REWARD_KEY = 30
@@ -40,7 +40,7 @@ _  __#__  #
     c#  ___   _
   _#__        *
  p #         __
-_______________ 
+_______________
 """
 
 
@@ -67,17 +67,22 @@ class Environment:
                     self.keys.append((row, col))
 
     def apply(self, state, action):
-        new_state = (0, 0)
+        new_state = (state[0], state[1])
         if action == UP:
-            new_state = (state[0] - 1, state[1])
+            if self.canMove(action, state):
+                new_state = (state[0] - 1, state[1])
         elif action == DOWN:
-            new_state = (state[0] + 1, state[1])
+            if self.canMove(action, state):
+                new_state = (state[0] + 1, state[1])
         elif action == LEFT:
-            new_state = (state[0], state[1] - 1)
+            if self.canMove(action, state):
+                new_state = (state[0], state[1] - 1)
         elif action == RIGHT:
-            new_state = (state[0], state[1] + 1)
+            if self.canMove(action, state):
+                new_state = (state[0], state[1] + 1)
 
         if new_state in self.states:
+
             # calculer la récompense
             if self.states[new_state] in ['_']:
                 reward = REWARD_STUCK
@@ -98,6 +103,24 @@ class Environment:
 
     def map_is_done(self):
         return self.keys_taken == len(self.keys)
+
+    def canMove(self, action, state):
+        if action == UP:
+            if (state[0] - 1, state[1]) == "#" and state[0] > 0:
+                return True
+            else:
+                return False
+        if action == DOWN:
+            if (state[0] + 1, state[1]) == "#" and state[0] < SCREEN_GRID_TILE_HEIGHT:
+                return True
+            else:
+                return False
+        if action == LEFT or action == RIGHT:
+            if ((state[0], state[1]) == "-" or (state[0] + 1, state[1]) == " ") \
+                    and SCREEN_GRID_TILE_HEIGHT > state[1] > 0:
+                return True
+            else:
+                return False
 
 
 class Agent:
@@ -123,6 +146,9 @@ class Agent:
     def do(self, action):
         self.previous_state = self.state
         self.state, self.reward = self.environment.apply(self.state, action)
+        print(self.state)
+        print(self.reward)
+        print(self.previous_state)
         self.score += self.reward
         self.last_action = action
 
@@ -158,9 +184,8 @@ class Policy:  # Q-table
     def update(self, previous_state, state, last_action, reward):
         # Q(st, at) = Q(st, at) + learning_rate * (reward + discount_factor * max(Q(state)) - Q(st, at))
         max_q = max(self.table[state].values())
-        self.table[previous_state][last_action] += self.learning_rate * \
-                                                   (reward + self.discount_factor * max_q - self.table[previous_state][
-                                                       last_action])
+        self.table[previous_state][last_action] += self.learning_rate * (reward + self.discount_factor * max_q
+                                                                         - self.table[previous_state][last_action])
 
 
 class MyGame(arcade.Window):
@@ -249,11 +274,10 @@ class MyGame(arcade.Window):
             action = self.agent.best_action()
             self.agent.do(action)
             self.agent.update_policy()
-            self.update_player()
+            self.update_player(action)
 
-    def update_player(self):
-        self.player_sprite.center_x = self.agent.state[1] * self.player_sprite.width + self.player_sprite.width * 0.5
-        self.player_sprite.center_y = self.height - (self.agent.state[0] * self.player_sprite.width + self.player_sprite.width * 0.5)
+    def update_player(self, action):
+        self.movePlayer(action)
 
     def on_key_press(self, key, modifiers):
         if self.agent.best_action == UP:
@@ -266,9 +290,25 @@ class MyGame(arcade.Window):
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
         elif (self.agent.best_action == RIGHT) and (not self.is_on_the_right_edges()):
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-        elif (self.agent.best_action == SPRITE_SCALING_TILES) and self.physics_engine.is_on_ladder():
+        elif (self.agent.best_action == LEFT) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
         elif (self.agent.best_action == RIGHT) and self.physics_engine.is_on_ladder():
+            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
+
+    def movePlayer(self, action):
+        if action == UP:
+            if self.physics_engine.is_on_ladder():
+                self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
+        elif action == DOWN:
+            if self.physics_engine.is_on_ladder():
+                self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
+        elif (action == LEFT) and (not self.is_on_the_left_edges()):
+            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
+        elif (action == RIGHT) and (not self.is_on_the_right_edges()):
+            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
+        elif (self.agent.best_action == LEFT) and self.physics_engine.is_on_ladder():
+            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
+        elif (action == RIGHT) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_release(self, key, modifiers):
