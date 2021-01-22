@@ -20,8 +20,7 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 200
-#REWARD_KEY = 30
+REWARD_GOAL = 60
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -33,14 +32,14 @@ UP, DOWN, LEFT, RIGHT = 'U', 'D', 'L', 'R'
 ACTIONS = [UP, DOWN, LEFT, RIGHT]
 
 MAZE = """
-  --------#    
- __       #___ 
-c      c  #    
-_  __#__  #    
-    c#  ___   _
-  _#__        
- p #         __
-_______________ 
+__________
+_        _
+_        _
+_        _
+_  p   c _
+_  __#__ _
+_  c # c _
+__________
 """
 
 
@@ -308,7 +307,7 @@ def main():
     agent = Agent(env)
 
     # Boucle principale
-    for i in range((50)):
+    for i in range(60):
         agent.reset()
 
 
@@ -335,45 +334,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-    def find_key(self):
-        '''
-            Identification du vainqueur
-            Retourne le premier vainqueur trouvé (pas de gestion de ex-aequo - ce cas n'est pas supposé arriver)
-            On pourrait coder plus propre...
-        '''
-
-        # Recherche par ligne
-        for line in self.board:
-            if line[0] == "c": #and line.count(line[0]) == self.width:
-                return True
-
-        # Recherche par colonne
-        for j in range(len(self.board)):
-            env = self.board[0][j]
-            if env != "c":
-                for i in range(1, len(self.board)):
-                    if self.board[i][j] == "c":
-                        return True
-                    else:
-                        break
-
-        # Et les deux diagonales
-        env = self.board[0][0]
-        if env != "c":
-            for i in range(1, len(self.board)):
-                if self.board[i][i] == "c":
-                    return True
-                else:
-                    break
-
-        env = self.board[0][self.height - 1]
-        if env != "c":
-            for i in range(1, len(self.board)):
-                if self.board[i][self.height - i - 1] == "c":
-                    return True
-                else:
-                    break
-
-        return False
