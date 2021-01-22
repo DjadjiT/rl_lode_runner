@@ -86,7 +86,7 @@ class Environment:
 
         if new_state in self.states:
             # calculer la récompense
-            if self.states[new_state] in ['_']:
+            if self.states[new_state] in ['_', 'p']:
                 reward = REWARD_STUCK
             elif self.states[new_state] in ['c']:
                 self.states[new_state] = " "
@@ -99,6 +99,7 @@ class Environment:
             new_state = state
             reward = REWARD_IMPOSSIBLE
 
+        print(self.keys)
         return new_state, reward
 
     def map_is_done(self):
@@ -194,22 +195,24 @@ class MyGame(arcade.Window):
 
         for state in self.agent.environment.states:
             if self.agent.environment.states[state] == '_':
-                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png")
+                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
-                self.walls.append(sprite)
+                self.grounds.append(sprite)
+
             elif self.agent.environment.states[state] == 'c':
-                sprite = arcade.Sprite(":resources:images/items/keyYellow.png")
+                sprite = arcade.Sprite(":resources:images/items/keyYellow.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.keys.append(sprite)
+
             elif self.agent.environment.states[state] == '#':
-                sprite = arcade.Sprite(":resources:images/items/ladderMid.png")
+                sprite = arcade.Sprite(":resources:images/tiles/ladderMid.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.ladders.append(sprite)
 
-        self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png",0.5)
+        self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png", 0.5)
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
                                                              self.grounds,
@@ -217,11 +220,9 @@ class MyGame(arcade.Window):
                                                              ladders=self.ladders)
         self.update_player()
 
-
     def update_player(self):
         self.player.center_x = self.agent.state[1] * self.player.width + self.player.width * 0.5
         self.player.center_y = self.height - (self.agent.state[0] * self.player.width + self.player.width * 0.5)
-
 
     def on_update(self, delta_time):
         if not self.agent.environment.map_is_done():
@@ -230,6 +231,12 @@ class MyGame(arcade.Window):
             self.agent.update_policy()
             self.update_player()
 
+        key_hit_list = arcade.check_for_collision_with_list(self.player,
+                                                            self.keys)
+
+        for key in key_hit_list:
+            key.remove_from_sprite_lists()
+            arcade.play_sound(self.collect_key_sound, volume=0.08)
 
     def on_draw(self):
         arcade.start_render()
@@ -239,11 +246,10 @@ class MyGame(arcade.Window):
         self.player.draw()
         arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
-
     def on_key_press(self, key, modifiers):
         if key == arcade.key.R:
             self.agent.reset()
-
+            self.setup()
 
     def is_on_the_right_edges(self):
         return self.player.center_x > (SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH - SPRITE_SIZE / 2)
