@@ -13,14 +13,14 @@ SPRITE_SCALING_TILES = 0.5
 SPRITE_SIZE = int(SPRITE_IMAGE_SIZE * SPRITE_SCALING_PLAYER)
 
 # Size of grid to show on screen, in number of tiles
-SCREEN_GRID_TILE_WIDTH = 15
+SCREEN_GRID_TILE_WIDTH = 10
 SCREEN_GRID_TILE_HEIGHT = 8
 
 SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 60
+REWARD_GOAL = 150
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -46,24 +46,31 @@ __________
 class Environment:
     def __init__(self, text):
         self.states = {}
-        self.lines = text.strip().split('\n')
+        self.height = 0
+        self.width = 0
+        self.starting_point = (None, None)
+        self.keys = []
+        self.exit = []
+        self.keys_taken = 0
+        self.init_env(text)
 
-        self.height = len(self.lines)
-        self.width = len(self.lines[0])
-        self.init_map()
-
-    def init_map(self):
+    def init_env(self, text):
+        lines = text.strip().split('\n')
+        self.height = len(lines)
+        self.width = len(lines[0])
         self.starting_point = (None, None)
         self.keys = []
         self.exit = []
         self.keys_taken = 0
 
         for row in range(self.height):
-            for col in range(len(self.lines[row])):
-                self.states[(row, col)] = self.lines[row][col]
-                if self.lines[row][col] == 'p':
+            for col in range(len(lines[row])):
+                self.states[(row, col)] = lines[row][col]
+                if lines[row][col] == 'p':
                     self.starting_point = (row, col)
-                elif self.lines[row][col] == 'c':
+                elif lines[row][col] == '*':
+                    self.exit = (row, col)
+                elif lines[row][col] == 'c':
                     self.keys.append((row, col))
 
     def apply(self, state, action):
@@ -79,7 +86,7 @@ class Environment:
 
         if new_state in self.states:
             # calculer la récompense
-            if self.states[new_state] in ['_', '#']:
+            if self.states[new_state] in ['_']:
                 reward = REWARD_STUCK
             elif self.states[new_state] in ['c']:
                 self.states[new_state] = " "
@@ -110,11 +117,10 @@ class Agent:
         self.reset()
 
     def reset(self):
-        self.environment.init_map()
         self.state = self.environment.starting_point
         self.previous_state = self.state
         self.score = 0
-        self.environment.keys_taken = 0
+        self.environment.init_env(MAZE)
 
     def best_action(self):
         return self.policy.best_action(self.state)
@@ -127,6 +133,8 @@ class Agent:
 
     def update_policy(self):
         self.policy.update(self.previous_state, self.state, self.last_action, self.reward)
+        print('ACTION:', self.last_action, 'STATE:', self.previous_state, '->', self.state, 'SCORE:', self.score,
+              'KEYS TAKEN', self.environment.keys_taken)
 
 
 class Policy:  # Q-table
@@ -161,11 +169,14 @@ class Policy:  # Q-table
                                                    (reward + self.discount_factor * max_q - self.table[previous_state][
                                                        last_action])
 
+
 class MyGame(arcade.Window):
 
-    def __init__(self, width, height, title):
+    def __init__(self, width, height, title, agent):
         super().__init__(width, height, title)
         arcade.set_background_color(arcade.color.AMAZON)
+
+        self.agent = agent
 
         self.grounds_list = None
         self.ladders_list = None
@@ -181,7 +192,7 @@ class MyGame(arcade.Window):
 
     def setup(self):
         # Read in the tiled map
-        map_name = "level_1.tmx"
+        map_name = "level_0.tmx"
         my_map = arcade.tilemap.read_tmx(map_name)
         arcade.set_background_color(arcade.color.AMAZON)
         self.grounds_list = arcade.SpriteList()
@@ -205,12 +216,13 @@ class MyGame(arcade.Window):
                                                              gravity_constant=1.5,
                                                              ladders=self.ladders_list)
 
-        grid_x = 1
-        grid_y = 1
-        self.player_sprite.center_x = SPRITE_SIZE * grid_x + SPRITE_SIZE / 2
-        self.player_sprite.center_y = SPRITE_SIZE * grid_y + SPRITE_SIZE / 2
         # Add to player sprite list
         self.player_list.append(self.player_sprite)
+
+        self.player_sprite.center_x = (SCREEN_GRID_TILE_WIDTH - self.agent.state[1]) * self.player_sprite.width \
+                                      + self.player_sprite.width * 0.5
+        self.player_sprite.center_y = self.height - ((SCREEN_GRID_TILE_HEIGHT - self.agent.state[0])
+                                                     * self.player_sprite.width + self.player_sprite.width * 0.5)
 
     def on_draw(self):
         arcade.start_render()
@@ -219,6 +231,7 @@ class MyGame(arcade.Window):
         self.keys_list.draw()
         self.exit_list.draw()
         self.player_list.draw()
+        arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_update(self, delta_time):
         self.grounds_list.update()
@@ -236,25 +249,35 @@ class MyGame(arcade.Window):
             self.setup()
 
         exit_collision = len(arcade.check_for_collision_with_list(self.player_sprite, self.exit_list)) > 0
-        if exit_collision and len(self.keys_list) == 0:
+        if len(self.keys_list) == 0:
             self.setup()
+            self.agent.reset()
         elif exit_collision and len(self.keys_list) != 0:
             print("level not finished")
+        else:
+            action = self.agent.best_action()
+            self.agent.do(action)
+            self.agent.update_policy()
+            self.update_player()
+
+    def update_player(self):
+        self.player_sprite.center_x = self.agent.state[1] * self.player_sprite.width + self.player_sprite.width * 0.5
+        self.player_sprite.center_y = self.height - (self.agent.state[0] * self.player_sprite.width + self.player_sprite.width * 0.5)
 
     def on_key_press(self, key, modifiers):
-        if key == arcade.key.UP or key == arcade.key.W:
+        if self.agent.best_action == UP:
             if self.physics_engine.is_on_ladder():
                 self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
-        elif key == arcade.key.DOWN or key == arcade.key.S:
+        elif self.agent.best_action == DOWN:
             if self.physics_engine.is_on_ladder():
                 self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and (not self.is_on_the_left_edges()):
+        elif (self.agent.best_action == LEFT) and (not self.is_on_the_left_edges()):
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and (not self.is_on_the_right_edges()):
+        elif (self.agent.best_action == RIGHT) and (not self.is_on_the_right_edges()):
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and self.physics_engine.is_on_ladder():
+        elif (self.agent.best_action == SPRITE_SCALING_TILES) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and self.physics_engine.is_on_ladder():
+        elif (self.agent.best_action == RIGHT) and self.physics_engine.is_on_ladder():
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_release(self, key, modifiers):
@@ -305,31 +328,9 @@ def main():
     """ Main method """
     env = Environment(MAZE)
     agent = Agent(env)
-
-    # Boucle principale
-    for i in range(60):
-        agent.reset()
-
-
-        # Tant que l'agent n'est pas sorti du labyrinthe
-        step = 1
-        while not agent.environment.map_is_done():
-            # Choisir la meilleure action de l'agent
-            action = agent.best_action()
-
-            # Obtenir le nouvel état de l'agent et sa récompense
-            agent.do(action)
-            print('#', step, 'ACTION:', action, 'STATE:', agent.previous_state, '->', agent.state, 'SCORE:',
-                  agent.score, 'KEY TAKEN:', agent.environment.keys_taken)
-            step += 1
-
-            # A partir de St, St+1, at, rt+1, on met à jour la politique (policy, q-table, etc.)
-            agent.update_policy()
-            # print(agent.policy)
-        print('----')
-    # game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    # game.setup()
-    # arcade.run()
+    game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, agent)
+    game.setup()
+    arcade.run()
 
 
 if __name__ == "__main__":
