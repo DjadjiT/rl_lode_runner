@@ -23,6 +23,7 @@ SCREEN_TITLE = "Lode Runner RL"
 REWARD_GOAL = 150
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
+REWARD_ENEMY = -20
 REWARD_IMPOSSIBLE = -60
 
 DEFAULT_LEARNING_RATE = 1
@@ -33,10 +34,10 @@ ACTIONS = [UP, DOWN, LEFT, RIGHT]
 
 MAZE = """
 __________
-_        _
-_        _
-_        _
-_  p   c _
+_ c      _
+_____#   _
+_    #   _
+_  p # e _
 _  __#__ _
 _  c # c _
 __________
@@ -54,7 +55,7 @@ class Environment:
         self.width = len(lines[0])
         self.starting_point = (None, None)
         self.keys = []
-        self.exit = []
+        self.enemies = []
         self.keys_taken = 0
 
         for row in range(self.height):
@@ -62,6 +63,8 @@ class Environment:
                 self.states[(row, col)] = lines[row][col]
                 if lines[row][col] == 'p':
                     self.starting_point = (row, col)
+                elif lines[row][col] == 'e':
+                    self.enemies.append((row, col))
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
 
@@ -70,7 +73,8 @@ class Environment:
         if action == UP and self.states[state] == "#":
             new_state = (state[0] - 1, state[1])
         elif action == DOWN and self.states[state] == "#":
-            new_state = (state[0] + 1, state[1])
+            if self.states[(state[0] + 1, state[1])] != "_":
+                new_state = (state[0] + 1, state[1])
         elif action == LEFT:
             if self.states[(state[0] + 1, state[1])] != " ":
                 new_state = (state[0], state[1] - 1)
@@ -90,6 +94,8 @@ class Environment:
                 self.states[new_state] = " "
                 self.keys_taken += 1
                 reward = REWARD_GOAL
+            elif self.states[new_state] in ['e']:
+                reward = REWARD_ENEMY
             else:
                 reward = REWARD_DEFAULT
         else:
@@ -178,6 +184,7 @@ class MyGame(arcade.Window):
 
         self.agent = agent
         self.collect_key_sound = arcade.load_sound(":resources:sounds/coin2.wav")
+        self.enemies_collision_sound = arcade.load_sound(":resources:sounds/hit1.wav")
 
     def setup(self):
         # Read in the tiled map
@@ -188,6 +195,7 @@ class MyGame(arcade.Window):
         self.walls = arcade.SpriteList()
         self.ladders = arcade.SpriteList()
         self.keys = arcade.SpriteList()
+        self.enemies = arcade.SpriteList()
         self.physics_engine = None
 
         for state in self.agent.environment.states:
@@ -209,12 +217,14 @@ class MyGame(arcade.Window):
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.ladders.append(sprite)
 
+            elif self.agent.environment.states[state] == 'e':
+                sprite = arcade.Sprite(":resources:images/enemies/bee.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.enemies.append(sprite)
+
         self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png", 0.5)
 
-        self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
-                                                             self.grounds,
-                                                             gravity_constant=1.5,
-                                                             ladders=self.ladders)
         self.update_player()
 
     def update_player(self):
@@ -223,7 +233,6 @@ class MyGame(arcade.Window):
                                 - self.player.height * 0.5)
 
     def on_update(self, delta_time):
-        self.physics_engine.update()
         if not self.agent.environment.map_is_done():
             action = self.agent.best_action()
             self.agent.do(action)
@@ -232,16 +241,21 @@ class MyGame(arcade.Window):
 
         key_hit_list = arcade.check_for_collision_with_list(self.player,
                                                             self.keys)
-
+        enemies_hit_list = arcade.check_for_collision_with_list(self.player,
+                                                            self.enemies)
         for key in key_hit_list:
             key.remove_from_sprite_lists()
             arcade.play_sound(self.collect_key_sound, volume=0.01)
+
+        for enemy in enemies_hit_list:
+            arcade.play_sound(self.enemies_collision_sound, volume=0.01)
 
     def on_draw(self):
         arcade.start_render()
         self.grounds.draw()
         self.ladders.draw()
         self.keys.draw()
+        self.enemies.draw()
         self.player.draw()
         arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
