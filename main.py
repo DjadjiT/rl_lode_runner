@@ -36,8 +36,8 @@ MAZE = """
 __________
 _c     c _
 _____#____
-_    #   _
-_  p # e _
+_c---#   _
+_  ep# e _
 _  __#__ _
 _  c # c _
 __________
@@ -75,12 +75,12 @@ class Environment:
         elif action == DOWN and self.states[(state[0]+1, state[1])] == "#":
             new_state = (state[0] + 1, state[1])
         elif action == LEFT:
-            if self.states[(state[0] + 1, state[1])] != " ":
+            if self.states[(state[0] + 1, state[1])] != " " or self.is_on_ladder(state):
                 new_state = (state[0], state[1] - 1)
             else:
                 new_state = (state[0] + 1, state[1])
         elif action == RIGHT:
-            if self.states[(state[0] + 1, state[1])] != " ":
+            if self.states[(state[0] + 1, state[1])] != " " or self.is_on_ladder(state):
                 new_state = (state[0], state[1] + 1)
             else:
                 new_state = (state[0] + 1, state[1])
@@ -107,6 +107,8 @@ class Environment:
     def map_is_done(self):
         return self.keys_taken == len(self.keys)
 
+    def is_on_ladder(self, state):
+        return self.states[(state[0], state[1])] == "#" or self.states[(state[0], state[1])] == "-"
 
 class Agent:
     def __init__(self, env: Environment):
@@ -210,11 +212,11 @@ class MyGame(arcade.Window):
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.keys.append(sprite)
 
-            elif self.agent.environment.states[state] == '*':
-                sprite = arcade.Sprite(":resources:images/tiles/signExit.png", 0.5)
+            elif self.agent.environment.states[state] == '-':
+                sprite = arcade.Sprite(":resources:images/tiles/bridgeB.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
-                self.exit.append(sprite)
+                self.ladders.append(sprite)
 
             elif self.agent.environment.states[state] == '#':
                 sprite = arcade.Sprite(":resources:images/tiles/ladderMid.png", 0.5)
