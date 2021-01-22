@@ -20,21 +20,20 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_KEY = 100
-REWARD_GOAL = 250
+REWARD_GOAL = 150
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
-REWARD_IMPOSSIBLE = -60
+REWARD_IMPOSSIBLE = -30
 
 DEFAULT_LEARNING_RATE = 1
-DEFAULT_DISCOUNT_FACTOR = 0.5
+DEFAULT_DISCOUNT_FACTOR = 0.3
 
 UP, DOWN, LEFT, RIGHT = 'U', 'D', 'L', 'R'
 ACTIONS = [UP, DOWN, LEFT, RIGHT]
 
 MAZE = """
 __________
-_c   c * _
+_c     c _
 _____#____
 _    #   _
 _  p # c _
@@ -55,6 +54,7 @@ class Environment:
         self.width = len(lines[0])
         self.starting_point = (None, None)
         self.keys = []
+        self.exit = []
         self.keys_taken = 0
 
         for row in range(self.height):
@@ -65,7 +65,7 @@ class Environment:
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
                 elif lines[row][col] == '*':
-                    self.exit = (row, col)
+                    self.exit.append((row, col))
 
     def apply(self, state, action):
         new_state = state
@@ -91,8 +91,6 @@ class Environment:
             elif self.states[new_state] in ['c']:
                 self.states[new_state] = " "
                 self.keys_taken += 1
-                reward = REWARD_KEY
-            elif self.states[new_state] in ['*'] and self.map_is_done():
                 reward = REWARD_GOAL
             else:
                 reward = REWARD_DEFAULT
@@ -235,8 +233,7 @@ class MyGame(arcade.Window):
 
     def on_update(self, delta_time):
         self.physics_engine.update()
-        if not self.agent.environment.map_is_done() \
-                or self.agent.state != self.agent.environment.exit:
+        if not self.agent.environment.map_is_done():
             action = self.agent.best_action()
             self.agent.do(action)
             self.agent.update_policy()
