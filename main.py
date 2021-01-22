@@ -99,7 +99,6 @@ class Environment:
             new_state = state
             reward = REWARD_IMPOSSIBLE
 
-        print(self.keys)
         return new_state, reward
 
     def map_is_done(self):
@@ -221,8 +220,9 @@ class MyGame(arcade.Window):
         self.update_player()
 
     def update_player(self):
-        self.player.center_x = self.agent.state[1] * self.player.width + self.player.width * 0.5
-        self.player.center_y = self.height - (self.agent.state[0] * self.player.width + self.player.width * 0.5)
+        self.player.center_x = (self.agent.state[1] * self.player.height) + self.player.height * 0.5
+        self.player.center_y = (self.height - (self.agent.state[0] * self.player.height)
+                                - self.player.height * 0.5)
 
     def on_update(self, delta_time):
         if not self.agent.environment.map_is_done():
@@ -236,7 +236,7 @@ class MyGame(arcade.Window):
 
         for key in key_hit_list:
             key.remove_from_sprite_lists()
-            arcade.play_sound(self.collect_key_sound, volume=0.08)
+            arcade.play_sound(self.collect_key_sound, volume=0.01)
 
     def on_draw(self):
         arcade.start_render()
