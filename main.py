@@ -120,6 +120,7 @@ class Agent:
         self.state = self.environment.starting_point
         self.previous_state = self.state
         self.score = 0
+        self.step = 0
         self.environment.init_env(MAZE)
 
     def best_action(self):
@@ -132,8 +133,9 @@ class Agent:
         self.last_action = action
 
     def update_policy(self):
+        self.step += 1
         self.policy.update(self.previous_state, self.state, self.last_action, self.reward)
-        print('ACTION:', self.last_action, 'STATE:', self.previous_state, '->', self.state, 'SCORE:', self.score,
+        print('#',self.step, 'ACTION:', self.last_action, 'STATE:', self.previous_state, '->', self.state, 'SCORE:', self.score,
               'KEYS TAKEN', self.environment.keys_taken)
 
 
@@ -177,151 +179,77 @@ class MyGame(arcade.Window):
         arcade.set_background_color(arcade.color.AMAZON)
 
         self.agent = agent
-
-        self.grounds_list = None
-        self.ladders_list = None
-        self.keys_list = None
-        self.exit_list = None
-        self.player_list = None
-        self.enemy_list = None
         self.collect_key_sound = arcade.load_sound(":resources:sounds/coin2.wav")
-
-        self.player_sprite = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png",
-                                           0.5)
-        self.physics_engine = None
 
     def setup(self):
         # Read in the tiled map
-        map_name = "level_0.tmx"
-        my_map = arcade.tilemap.read_tmx(map_name)
+        # map_name = "level_0.tmx"
+        # my_map = arcade.tilemap.read_tmx(map_name)
         arcade.set_background_color(arcade.color.AMAZON)
-        self.grounds_list = arcade.SpriteList()
-        self.ladders_list = arcade.SpriteList()
-        self.keys_list = arcade.SpriteList()
-        self.exit_list = arcade.SpriteList()
-        self.enemy_list = arcade.SpriteList()
-        self.player_list = arcade.SpriteList()
+        self.grounds = arcade.SpriteList()
+        self.walls = arcade.SpriteList()
+        self.ladders = arcade.SpriteList()
+        self.keys = arcade.SpriteList()
+        self.physics_engine = None
 
-        self.grounds_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="grounds", scaling=0.5,
-                                                         use_spatial_hash=True)
-        self.ladders_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="ladders", scaling=0.5,
-                                                         use_spatial_hash=True)
-        self.keys_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="keys", scaling=0.5,
-                                                      use_spatial_hash=True)
-        self.exit_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="exit", scaling=0.5,
-                                                      use_spatial_hash=True)
+        for state in self.agent.environment.states:
+            if self.agent.environment.states[state] == '_':
+                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png")
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.walls.append(sprite)
+            elif self.agent.environment.states[state] == 'c':
+                sprite = arcade.Sprite(":resources:images/items/keyYellow.png")
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.keys.append(sprite)
+            elif self.agent.environment.states[state] == '#':
+                sprite = arcade.Sprite(":resources:images/items/ladderMid.png")
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.ladders.append(sprite)
 
-        self.physics_engine = arcade.PhysicsEnginePlatformer(self.player_sprite,
-                                                             self.grounds_list,
+        self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png",0.5)
+
+        self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
+                                                             self.grounds,
                                                              gravity_constant=1.5,
-                                                             ladders=self.ladders_list)
+                                                             ladders=self.ladders)
+        self.update_player()
 
-        # Add to player sprite list
-        self.player_list.append(self.player_sprite)
 
-        self.player_sprite.center_x = (SCREEN_GRID_TILE_WIDTH - self.agent.state[1]) * self.player_sprite.width \
-                                      + self.player_sprite.width * 0.5
-        self.player_sprite.center_y = self.height - ((SCREEN_GRID_TILE_HEIGHT - self.agent.state[0])
-                                                     * self.player_sprite.width + self.player_sprite.width * 0.5)
+    def update_player(self):
+        self.player.center_x = self.agent.state[1] * self.player.width + self.player.width * 0.5
+        self.player.center_y = self.height - (self.agent.state[0] * self.player.width + self.player.width * 0.5)
 
-    def on_draw(self):
-        arcade.start_render()
-        self.grounds_list.draw()
-        self.ladders_list.draw()
-        self.keys_list.draw()
-        self.exit_list.draw()
-        self.player_list.draw()
-        arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_update(self, delta_time):
-        self.grounds_list.update()
-        self.physics_engine.update()
-        self.player_list.update()
-
-        key_hit_list = arcade.check_for_collision_with_list(self.player_sprite,
-                                                            self.keys_list)
-
-        for key in key_hit_list:
-            key.remove_from_sprite_lists()
-            arcade.play_sound(self.collect_key_sound, volume=0.08)
-
-        if len(arcade.check_for_collision_with_list(self.player_sprite, self.enemy_list)) > 0:
-            self.setup()
-
-        exit_collision = len(arcade.check_for_collision_with_list(self.player_sprite, self.exit_list)) > 0
-        if len(self.keys_list) == 0:
-            self.setup()
-            self.agent.reset()
-        elif exit_collision and len(self.keys_list) != 0:
-            print("level not finished")
-        else:
+        if not self.agent.environment.map_is_done():
             action = self.agent.best_action()
             self.agent.do(action)
             self.agent.update_policy()
             self.update_player()
 
-    def update_player(self):
-        self.player_sprite.center_x = self.agent.state[1] * self.player_sprite.width + self.player_sprite.width * 0.5
-        self.player_sprite.center_y = self.height - (self.agent.state[0] * self.player_sprite.width + self.player_sprite.width * 0.5)
+
+    def on_draw(self):
+        arcade.start_render()
+        self.grounds.draw()
+        self.ladders.draw()
+        self.keys.draw()
+        self.player.draw()
+        arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
+
 
     def on_key_press(self, key, modifiers):
-        if self.agent.best_action == UP:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
-        elif self.agent.best_action == DOWN:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
-        elif (self.agent.best_action == LEFT) and (not self.is_on_the_left_edges()):
-            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (self.agent.best_action == RIGHT) and (not self.is_on_the_right_edges()):
-            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-        elif (self.agent.best_action == SPRITE_SCALING_TILES) and self.physics_engine.is_on_ladder():
-            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (self.agent.best_action == RIGHT) and self.physics_engine.is_on_ladder():
-            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
+        if key == arcade.key.R:
+            self.agent.reset()
 
-    def on_key_release(self, key, modifiers):
-        if key == arcade.key.UP or key == arcade.key.W:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = 0
-        elif key == arcade.key.DOWN or key == arcade.key.S:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = 0
-        elif key == arcade.key.LEFT or key == arcade.key.A:
-            self.player_sprite.change_x = 0
-        elif key == arcade.key.RIGHT or key == arcade.key.D:
-            self.player_sprite.change_x = 0
-
-    def on_mouse_motion(self, x, y, delta_x, delta_y):
-        """
-        Called whenever the mouse moves.
-        """
-        pass
-
-    def on_mouse_press(self, x, y, button, key_modifiers):
-        """
-        Called when the user presses a mouse button.
-        """
-        pass
-
-    def on_mouse_release(self, x, y, button, key_modifiers):
-        """
-        Called when a user releases a mouse button.
-        """
-        pass
 
     def is_on_the_right_edges(self):
-        return self.player_sprite.center_x > (SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH - SPRITE_SIZE / 2)
+        return self.player.center_x > (SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH - SPRITE_SIZE / 2)
 
     def is_on_the_left_edges(self):
-        return self.player_sprite.center_x < (SPRITE_SIZE / 2)
-
-    def move_towards_player(self, enemy: arcade.Sprite):
-        dx, dy = self.player_sprite.center_x - enemy.center_x, self.player_sprite.center_y - enemy.center_y
-        if dx > 0:
-            enemy.change_x = ENEMY_MOVEMENT_SPEED
-        elif dx < 0:
-            enemy.change_x = -ENEMY_MOVEMENT_SPEED
+        return self.player.center_x < (SPRITE_SIZE / 2)
 
 
 def main():
