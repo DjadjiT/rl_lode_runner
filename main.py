@@ -20,7 +20,7 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 150
+REWARD_GOAL = 60
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -46,19 +46,13 @@ __________
 class Environment:
     def __init__(self, text):
         self.states = {}
-        self.height = 0
-        self.width = 0
-        self.starting_point = (None, None)
-        self.keys = []
-        self.exit = []
-        self.keys_taken = 0
         self.init_env(text)
 
     def init_env(self, text):
         lines = text.strip().split('\n')
         self.height = len(lines)
         self.width = len(lines[0])
-        self.starting_point = (None, None)
+        self.starting_point = (0, 0)
         self.keys = []
         self.exit = []
         self.keys_taken = 0
@@ -68,8 +62,6 @@ class Environment:
                 self.states[(row, col)] = lines[row][col]
                 if lines[row][col] == 'p':
                     self.starting_point = (row, col)
-                elif lines[row][col] == '*':
-                    self.exit = (row, col)
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
 
@@ -221,8 +213,8 @@ class MyGame(arcade.Window):
         self.update_player()
 
     def update_player(self):
-        self.player.center_x = self.agent.state[1] * self.player.width + self.player.width * 0.5
-        self.player.center_y = self.height - (self.agent.state[0] * self.player.width + self.player.width * 0.5)
+        self.player.center_x = self.agent.state[1] * self.player.width * 0.5#+ self.player.width * 0.5
+        self.player.center_y = self.agent.state[0] * self.player.height * 0.5
 
     def on_update(self, delta_time):
         if not self.agent.environment.map_is_done():
@@ -231,8 +223,7 @@ class MyGame(arcade.Window):
             self.agent.update_policy()
             self.update_player()
 
-        key_hit_list = arcade.check_for_collision_with_list(self.player,
-                                                            self.keys)
+        key_hit_list = arcade.check_for_collision_with_list(self.player,self.keys)
 
         for key in key_hit_list:
             key.remove_from_sprite_lists()
