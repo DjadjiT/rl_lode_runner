@@ -20,7 +20,8 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 150
+REWARD_KEY = 100
+REWARD_GOAL = 250
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -33,10 +34,10 @@ ACTIONS = [UP, DOWN, LEFT, RIGHT]
 
 MAZE = """
 __________
-_        _
-_        _
-_        _
-_  p   c _
+_c   c * _
+_____#____
+_    #   _
+_  p # c _
 _  __#__ _
 _  c # c _
 __________
@@ -54,7 +55,6 @@ class Environment:
         self.width = len(lines[0])
         self.starting_point = (None, None)
         self.keys = []
-        self.exit = []
         self.keys_taken = 0
 
         for row in range(self.height):
@@ -64,12 +64,14 @@ class Environment:
                     self.starting_point = (row, col)
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
+                elif lines[row][col] == '*':
+                    self.exit = (row, col)
 
     def apply(self, state, action):
         new_state = state
         if action == UP and self.states[state] == "#":
             new_state = (state[0] - 1, state[1])
-        elif action == DOWN and self.states[state] == "#":
+        elif action == DOWN and self.states[(state[0]+1, state[1])] == "#":
             new_state = (state[0] + 1, state[1])
         elif action == LEFT:
             if self.states[(state[0] + 1, state[1])] != " ":
@@ -89,6 +91,8 @@ class Environment:
             elif self.states[new_state] in ['c']:
                 self.states[new_state] = " "
                 self.keys_taken += 1
+                reward = REWARD_KEY
+            elif self.states[new_state] in ['*'] and self.map_is_done():
                 reward = REWARD_GOAL
             else:
                 reward = REWARD_DEFAULT
@@ -187,6 +191,7 @@ class MyGame(arcade.Window):
         self.grounds = arcade.SpriteList()
         self.walls = arcade.SpriteList()
         self.ladders = arcade.SpriteList()
+        self.exit = arcade.SpriteList()
         self.keys = arcade.SpriteList()
         self.physics_engine = None
 
@@ -202,6 +207,12 @@ class MyGame(arcade.Window):
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.keys.append(sprite)
+
+            elif self.agent.environment.states[state] == '*':
+                sprite = arcade.Sprite(":resources:images/tiles/signExit.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.exit.append(sprite)
 
             elif self.agent.environment.states[state] == '#':
                 sprite = arcade.Sprite(":resources:images/tiles/ladderMid.png", 0.5)
@@ -224,11 +235,15 @@ class MyGame(arcade.Window):
 
     def on_update(self, delta_time):
         self.physics_engine.update()
-        if not self.agent.environment.map_is_done():
+        if not self.agent.environment.map_is_done() \
+                or self.agent.state != self.agent.environment.exit:
             action = self.agent.best_action()
             self.agent.do(action)
             self.agent.update_policy()
             self.update_player()
+        else:
+            self.agent.reset()
+            self.setup()
 
         key_hit_list = arcade.check_for_collision_with_list(self.player,
                                                             self.keys)
@@ -243,6 +258,7 @@ class MyGame(arcade.Window):
         self.ladders.draw()
         self.keys.draw()
         self.player.draw()
+        self.exit.draw()
         arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_key_press(self, key, modifiers):
