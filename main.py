@@ -23,20 +23,21 @@ SCREEN_TITLE = "Lode Runner RL"
 REWARD_GOAL = 150
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
-REWARD_IMPOSSIBLE = -30
+REWARD_ENEMY = -40
+REWARD_IMPOSSIBLE = -60
 
 DEFAULT_LEARNING_RATE = 1
-DEFAULT_DISCOUNT_FACTOR = 0.3
+DEFAULT_DISCOUNT_FACTOR = 0.5
 
 UP, DOWN, LEFT, RIGHT = 'U', 'D', 'L', 'R'
 ACTIONS = [UP, DOWN, LEFT, RIGHT]
 
 MAZE = """
 __________
-_c     c _
-_____#____
-_    #   _
-_  p # c _
+_        _
+_        _
+_        _
+_  p   e _
 _  __#__ _
 _  c # c _
 __________
@@ -54,7 +55,7 @@ class Environment:
         self.width = len(lines[0])
         self.starting_point = (None, None)
         self.keys = []
-        self.exit = []
+        self.enemies = []
         self.keys_taken = 0
 
         for row in range(self.height):
@@ -62,16 +63,16 @@ class Environment:
                 self.states[(row, col)] = lines[row][col]
                 if lines[row][col] == 'p':
                     self.starting_point = (row, col)
+                elif lines[row][col] == 'e':
+                    self.enemies.append((row, col))
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
-                elif lines[row][col] == '*':
-                    self.exit.append((row, col))
 
     def apply(self, state, action):
         new_state = state
         if action == UP and self.states[state] == "#":
             new_state = (state[0] - 1, state[1])
-        elif action == DOWN and self.states[(state[0]+1, state[1])] == "#":
+        elif action == DOWN and self.states[state] == "#":
             new_state = (state[0] + 1, state[1])
         elif action == LEFT:
             if self.states[(state[0] + 1, state[1])] != " ":
@@ -92,6 +93,8 @@ class Environment:
                 self.states[new_state] = " "
                 self.keys_taken += 1
                 reward = REWARD_GOAL
+            elif self.states[new_state] in ['e']:
+                reward = REWARD_ENEMY
             else:
                 reward = REWARD_DEFAULT
         else:
@@ -180,6 +183,7 @@ class MyGame(arcade.Window):
 
         self.agent = agent
         self.collect_key_sound = arcade.load_sound(":resources:sounds/coin2.wav")
+        self.enemies_collision_sound = arcade.load_sound(":resources:sounds/hit1.wav")
 
     def setup(self):
         # Read in the tiled map
@@ -189,8 +193,8 @@ class MyGame(arcade.Window):
         self.grounds = arcade.SpriteList()
         self.walls = arcade.SpriteList()
         self.ladders = arcade.SpriteList()
-        self.exit = arcade.SpriteList()
         self.keys = arcade.SpriteList()
+        self.enemies = arcade.SpriteList()
         self.physics_engine = None
 
         for state in self.agent.environment.states:
@@ -206,17 +210,17 @@ class MyGame(arcade.Window):
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.keys.append(sprite)
 
-            elif self.agent.environment.states[state] == '*':
-                sprite = arcade.Sprite(":resources:images/tiles/signExit.png", 0.5)
-                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
-                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
-                self.exit.append(sprite)
-
             elif self.agent.environment.states[state] == '#':
                 sprite = arcade.Sprite(":resources:images/tiles/ladderMid.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.ladders.append(sprite)
+
+            elif self.agent.environment.states[state] == 'e':
+                sprite = arcade.Sprite(":resources:images/enemies/bee.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.enemies.append(sprite)
 
         self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png", 0.5)
 
@@ -238,9 +242,6 @@ class MyGame(arcade.Window):
             self.agent.do(action)
             self.agent.update_policy()
             self.update_player()
-        else:
-            self.agent.reset()
-            self.setup()
 
         key_hit_list = arcade.check_for_collision_with_list(self.player,
                                                             self.keys)
@@ -255,7 +256,6 @@ class MyGame(arcade.Window):
         self.ladders.draw()
         self.keys.draw()
         self.player.draw()
-        self.exit.draw()
         arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_key_press(self, key, modifiers):
