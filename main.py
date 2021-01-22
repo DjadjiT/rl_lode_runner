@@ -20,11 +20,10 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 60
+REWARD_GOAL = 200
 #REWARD_KEY = 30
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
-REWARD_FALL = 0
 REWARD_IMPOSSIBLE = -60
 
 DEFAULT_LEARNING_RATE = 1
@@ -39,7 +38,7 @@ MAZE = """
 c      c  #    
 _  __#__  #    
     c#  ___   _
-  _#__        *
+  _#__        
  p #         __
 _______________ 
 """
@@ -65,8 +64,6 @@ class Environment:
                 self.states[(row, col)] = self.lines[row][col]
                 if self.lines[row][col] == 'p':
                     self.starting_point = (row, col)
-                #elif self.lines[row][col] == '*':
-                    #self.exit = (row, col)
                 elif self.lines[row][col] == 'c':
                     self.keys.append((row, col))
 
@@ -83,11 +80,9 @@ class Environment:
 
         if new_state in self.states:
             # calculer la récompense
-            if self.states[new_state] in ['_']:
+            if self.states[new_state] in ['_', '#']:
                 reward = REWARD_STUCK
-            #elif self.states[new_state] in ['*'] and self.map_is_done():  # Sortie du labyrinthe : grosse récompense
-
-            elif self.states[new_state] in ['c'] and not self.map_is_done():
+            elif self.states[new_state] in ['c']:
                 self.states[new_state] = " "
                 self.keys_taken += 1
                 reward = REWARD_GOAL
@@ -166,7 +161,6 @@ class Policy:  # Q-table
         self.table[previous_state][last_action] += self.learning_rate * \
                                                    (reward + self.discount_factor * max_q - self.table[previous_state][
                                                        last_action])
-
 
 class MyGame(arcade.Window):
 
@@ -314,20 +308,20 @@ def main():
     agent = Agent(env)
 
     # Boucle principale
-    for i in range(50):
+    for i in range((50)):
         agent.reset()
 
 
         # Tant que l'agent n'est pas sorti du labyrinthe
         step = 1
-        while (agent.state != env.exit) and not agent.environment.map_is_done():
+        while not agent.environment.map_is_done():
             # Choisir la meilleure action de l'agent
             action = agent.best_action()
 
             # Obtenir le nouvel état de l'agent et sa récompense
             agent.do(action)
             print('#', step, 'ACTION:', action, 'STATE:', agent.previous_state, '->', agent.state, 'SCORE:',
-                  agent.score)
+                  agent.score, 'KEY TAKEN:', agent.environment.keys_taken)
             step += 1
 
             # A partir de St, St+1, at, rt+1, on met à jour la politique (policy, q-table, etc.)
