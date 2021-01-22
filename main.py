@@ -1,8 +1,5 @@
-import math
-from typing import Optional
 import arcade
 
-# How big are our image tiles?
 SPRITE_IMAGE_SIZE = 128
 
 PLAYER_MOVEMENT_SPEED = 5
@@ -16,173 +13,280 @@ SPRITE_SCALING_TILES = 0.5
 SPRITE_SIZE = int(SPRITE_IMAGE_SIZE * SPRITE_SCALING_PLAYER)
 
 # Size of grid to show on screen, in number of tiles
-SCREEN_GRID_WIDTH = 15
-SCREEN_GRID_HEIGHT = 8
+SCREEN_GRID_TILE_WIDTH = 10
+SCREEN_GRID_TILE_HEIGHT = 8
 
-# Size of screen to show, in pixels
-SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_WIDTH
-SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_HEIGHT
+SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
+SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
+
+REWARD_GOAL = 150
+REWARD_DEFAULT = -1
+REWARD_STUCK = -6
+REWARD_IMPOSSIBLE = -40
+REWARD_ENEMY = -20
+
+DEFAULT_LEARNING_RATE = 1
+DEFAULT_DISCOUNT_FACTOR = 0.3
+
+UP, DOWN, LEFT, RIGHT = 'U', 'D', 'L', 'R'
+ACTIONS = [UP, DOWN, LEFT, RIGHT]
+
+MAZE = """
+__________
+_c     c _
+_____#____
+_c---#   _
+_  ep# e _
+_  __#__ _
+_  c # c _
+__________
+"""
 
 
 class Environment:
     def __init__(self, text):
         self.states = {}
-        lines = text.strip().split('\n')
+        self.init_env(text)
 
+    def init_env(self, text):
+        lines = text.strip().split('\n')
         self.height = len(lines)
         self.width = len(lines[0])
-        self.wall = []
-        self.ladder = []
-        self.ground = []
+        self.starting_point = (None, None)
+        self.keys = []
+        self.exit = []
+        self.keys_taken = 0
+
+        for row in range(self.height):
+            for col in range(len(lines[row])):
+                self.states[(row, col)] = lines[row][col]
+                if lines[row][col] == 'p':
+                    self.starting_point = (row, col)
+                elif lines[row][col] == 'c':
+                    self.keys.append((row, col))
+                elif lines[row][col] == '*':
+                    self.exit.append((row, col))
+
+    def apply(self, state, action):
+        new_state = state
+        if action == UP and self.states[state] == "#":
+            new_state = (state[0] - 1, state[1])
+        elif action == DOWN and self.states[(state[0]+1, state[1])] == "#":
+            new_state = (state[0] + 1, state[1])
+        elif action == LEFT:
+            if self.states[(state[0] + 1, state[1])] != " " or self.is_on_ladder(state):
+                new_state = (state[0], state[1] - 1)
+            else:
+                new_state = (state[0] + 1, state[1])
+        elif action == RIGHT:
+            if self.states[(state[0] + 1, state[1])] != " " or self.is_on_ladder(state):
+                new_state = (state[0], state[1] + 1)
+            else:
+                new_state = (state[0] + 1, state[1])
+
+        if new_state in self.states:
+            # calculer la récompense
+            if self.states[new_state] in ['_', 'p']:
+                reward = REWARD_STUCK
+            elif self.states[new_state] in ['c']:
+                self.states[new_state] = " "
+                self.keys_taken += 1
+                reward = REWARD_GOAL
+            elif self.states[new_state] in ['e']:
+                reward = REWARD_ENEMY
+            else:
+                reward = REWARD_DEFAULT
+        else:
+            # Etat impossible: grosse pénalité
+            new_state = state
+            reward = REWARD_IMPOSSIBLE
+
+        return new_state, reward
+
+    def map_is_done(self):
+        return self.keys_taken == len(self.keys)
+
+    def is_on_ladder(self, state):
+        return self.states[(state[0], state[1])] == "#" or self.states[(state[0], state[1])] == "-"
+
+class Agent:
+    def __init__(self, env: Environment):
+        self.environment = env
+        self.policy = Policy(env.states.keys(), ACTIONS)
+        self.state = None
+        self.score = 0
+        self.previous_state = None
+        self.reward = None
+        self.last_action = None
+        self.reset()
+
+    def reset(self):
+        self.state = self.environment.starting_point
+        self.previous_state = self.state
+        self.score = 0
+        self.step = 0
+        self.environment.init_env(MAZE)
+
+    def best_action(self):
+        return self.policy.best_action(self.state)
+
+    def do(self, action):
+        self.previous_state = self.state
+        self.state, self.reward = self.environment.apply(self.state, action)
+        self.score += self.reward
+        self.last_action = action
+
+    def update_policy(self):
+        self.step += 1
+        self.policy.update(self.previous_state, self.state, self.last_action, self.reward)
+        print('#',self.step, 'ACTION:', self.last_action, 'STATE:', self.previous_state, '->', self.state, 'SCORE:', self.score,
+              'KEYS TAKEN', self.environment.keys_taken)
+
+
+class Policy:  # Q-table
+    def __init__(self, states, actions,
+                 learning_rate=DEFAULT_LEARNING_RATE,
+                 discount_factor=DEFAULT_DISCOUNT_FACTOR):
+        self.table = {}
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        for s in states:
+            self.table[s] = {}
+            for a in actions:
+                self.table[s][a] = 0
+
+    def __repr__(self):
+        res = ''
+        for state in self.table:
+            res += f'{state}\t{self.table[state]}\n'
+        return res
+
+    def best_action(self, state):
+        action = None
+        for a in self.table[state]:
+            if action is None or self.table[state][a] > self.table[state][action]:
+                action = a
+        return action
+
+    def update(self, previous_state, state, last_action, reward):
+        # Q(st, at) = Q(st, at) + learning_rate * (reward + discount_factor * max(Q(state)) - Q(st, at))
+        max_q = max(self.table[state].values())
+        self.table[previous_state][last_action] += self.learning_rate * \
+                                                   (reward + self.discount_factor * max_q - self.table[previous_state][
+                                                       last_action])
 
 
 class MyGame(arcade.Window):
 
-    def __init__(self, width, height, title):
+    def __init__(self, width, height, title, agent):
         super().__init__(width, height, title)
         arcade.set_background_color(arcade.color.AMAZON)
 
-        self.grounds_list = None
-        self.ladders_list = None
-        self.keys_list = None
-        self.exit_list = None
-        self.player_list = None
-        self.enemy_list = None
+        self.agent = agent
         self.collect_key_sound = arcade.load_sound(":resources:sounds/coin2.wav")
-
-        self.player_sprite = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png",
-                                           0.5)
-        self.physics_engine = None
 
     def setup(self):
         # Read in the tiled map
-        map_name = "level_1.tmx"
-        my_map = arcade.tilemap.read_tmx(map_name)
+        # map_name = "level_0.tmx"
+        # my_map = arcade.tilemap.read_tmx(map_name)
         arcade.set_background_color(arcade.color.AMAZON)
-        self.grounds_list = arcade.SpriteList()
-        self.ladders_list = arcade.SpriteList()
-        self.keys_list = arcade.SpriteList()
-        self.exit_list = arcade.SpriteList()
-        self.enemy_list = arcade.SpriteList()
-        self.player_list = arcade.SpriteList()
-        print(SPRITE_SIZE * SCREEN_GRID_WIDTH - SPRITE_SIZE / 2)
-        print(SPRITE_SIZE / 2)
+        self.grounds = arcade.SpriteList()
+        self.walls = arcade.SpriteList()
+        self.ladders = arcade.SpriteList()
+        self.exit = arcade.SpriteList()
+        self.enemies = arcade.SpriteList()
+        self.keys = arcade.SpriteList()
+        self.physics_engine = None
 
-        self.grounds_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="grounds", scaling=0.5,
-                                                         use_spatial_hash=True)
-        self.ladders_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="ladders", scaling=0.5,
-                                                         use_spatial_hash=True)
-        self.keys_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="keys", scaling=0.5,
-                                                      use_spatial_hash=True)
-        self.exit_list = arcade.tilemap.process_layer(map_object=my_map, layer_name="exit", scaling=0.5,
-                                                      use_spatial_hash=True)
+        for state in self.agent.environment.states:
+            if self.agent.environment.states[state] == '_':
+                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.grounds.append(sprite)
 
-        self.physics_engine = arcade.PhysicsEnginePlatformer(self.player_sprite,
-                                                             self.grounds_list,
+            elif self.agent.environment.states[state] == 'c':
+                sprite = arcade.Sprite(":resources:images/items/keyYellow.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.keys.append(sprite)
+
+            elif self.agent.environment.states[state] == '-':
+                sprite = arcade.Sprite(":resources:images/tiles/bridgeB.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.ladders.append(sprite)
+
+            elif self.agent.environment.states[state] == '#':
+                sprite = arcade.Sprite(":resources:images/tiles/ladderMid.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.ladders.append(sprite)
+            elif self.agent.environment.states[state] == 'e':
+                sprite = arcade.Sprite(":resources:images/enemies/bee.png", 0.5)
+                sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
+                sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
+                self.enemies.append(sprite)
+
+        self.player = arcade.Sprite(":resources:images/animated_characters/female_person/femalePerson_idle.png", 0.5)
+
+        self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
+                                                             self.grounds,
                                                              gravity_constant=1.5,
-                                                             ladders=self.ladders_list)
+                                                             ladders=self.ladders)
+        self.update_player()
 
-        grid_x = 1
-        grid_y = 1
-        self.player_sprite.center_x = SPRITE_SIZE * grid_x + SPRITE_SIZE / 2
-        self.player_sprite.center_y = SPRITE_SIZE * grid_y + SPRITE_SIZE / 2
-        # Add to player sprite list
-        self.player_list.append(self.player_sprite)
-
-    def on_draw(self):
-        arcade.start_render()
-        self.grounds_list.draw()
-        self.ladders_list.draw()
-        self.keys_list.draw()
-        self.exit_list.draw()
-        self.player_list.draw()
+    def update_player(self):
+        self.player.center_x = (self.agent.state[1] * self.player.height) + self.player.height * 0.5
+        self.player.center_y = (self.height - (self.agent.state[0] * self.player.height)
+                                - self.player.height * 0.5)
 
     def on_update(self, delta_time):
-        self.grounds_list.update()
         self.physics_engine.update()
-        self.player_list.update()
-        print(self.player_sprite.center_x)
+        if not self.agent.environment.map_is_done():
+            action = self.agent.best_action()
+            self.agent.do(action)
+            self.agent.update_policy()
+            self.update_player()
+        else:
+            self.agent.reset()
+            self.setup()
 
-        key_hit_list = arcade.check_for_collision_with_list(self.player_sprite,
-                                                            self.keys_list)
+        key_hit_list = arcade.check_for_collision_with_list(self.player,
+                                                            self.keys)
 
         for key in key_hit_list:
             key.remove_from_sprite_lists()
-            arcade.play_sound(self.collect_key_sound, volume=0.08)
+            arcade.play_sound(self.collect_key_sound, volume=0.01)
 
-        if len(arcade.check_for_collision_with_list(self.player_sprite, self.enemy_list)) > 0:
-            self.setup()
-
-        exit_collision = len(arcade.check_for_collision_with_list(self.player_sprite, self.exit_list)) > 0
-        if exit_collision and len(self.keys_list) == 0:
-            self.setup()
-        elif exit_collision and len(self.keys_list) != 0:
-            print("level not finished")
+    def on_draw(self):
+        arcade.start_render()
+        self.grounds.draw()
+        self.ladders.draw()
+        self.keys.draw()
+        self.player.draw()
+        self.exit.draw()
+        self.enemies.draw()
+        arcade.draw_text(f"Score: {self.agent.score}", 10, 10, arcade.csscolor.WHITE, 20)
 
     def on_key_press(self, key, modifiers):
-        if key == arcade.key.UP or key == arcade.key.W:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
-        elif key == arcade.key.DOWN or key == arcade.key.S:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and (not self.is_on_the_left_edges()):
-            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and (not self.is_on_the_right_edges()):
-            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.LEFT or key == arcade.key.A) and self.physics_engine.is_on_ladder():
-            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif (key == arcade.key.RIGHT or key == arcade.key.D) and self.physics_engine.is_on_ladder():
-            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-
-    def on_key_release(self, key, modifiers):
-        if key == arcade.key.UP or key == arcade.key.W:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = 0
-        elif key == arcade.key.DOWN or key == arcade.key.S:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = 0
-        elif key == arcade.key.LEFT or key == arcade.key.A:
-            self.player_sprite.change_x = 0
-        elif key == arcade.key.RIGHT or key == arcade.key.D:
-            self.player_sprite.change_x = 0
-
-    def on_mouse_motion(self, x, y, delta_x, delta_y):
-        """
-        Called whenever the mouse moves.
-        """
-        pass
-
-    def on_mouse_press(self, x, y, button, key_modifiers):
-        """
-        Called when the user presses a mouse button.
-        """
-        pass
-
-    def on_mouse_release(self, x, y, button, key_modifiers):
-        """
-        Called when a user releases a mouse button.
-        """
-        pass
+        if key == arcade.key.R:
+            self.agent.reset()
+            self.setup()
 
     def is_on_the_right_edges(self):
-        return self.player_sprite.center_x > (SPRITE_SIZE * SCREEN_GRID_WIDTH - SPRITE_SIZE / 2)
+        return self.player.center_x > (SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH - SPRITE_SIZE / 2)
 
     def is_on_the_left_edges(self):
-        return self.player_sprite.center_x < (SPRITE_SIZE / 2)
-
-    def move_towards_player(self, enemy: arcade.Sprite):
-        dx, dy = self.player_sprite.center_x - enemy.center_x, self.player_sprite.center_y - enemy.center_y
-        if dx > 0:
-            enemy.change_x = ENEMY_MOVEMENT_SPEED
-        elif dx < 0:
-            enemy.change_x = -ENEMY_MOVEMENT_SPEED
+        return self.player.center_x < (SPRITE_SIZE / 2)
 
 
 def main():
     """ Main method """
-    game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+    env = Environment(MAZE)
+    agent = Agent(env)
+    game = MyGame(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, agent)
     game.setup()
     arcade.run()
 

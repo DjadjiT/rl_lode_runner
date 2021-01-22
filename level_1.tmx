@@ -16,9 +16,9 @@
    eJxjYBgFtAbsA2g3AAVEAAg=
   </data>
  </layer>
- <layer id="3" name="keys" width="15" height="8" locked="1">
+ <layer id="3" name="keys" width="15" height="8">
   <data encoding="base64" compression="zlib">
-   eJxjYBgYwEqmHLUBPe0aCAAAE8QAEA==
+   eJxjYBgYwEqmHLUBPe0iBVDLXQAVLAAV
   </data>
  </layer>
  <layer id="6" name="enemy" width="15" height="8" locked="1">
