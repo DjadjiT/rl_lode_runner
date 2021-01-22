@@ -20,7 +20,7 @@ SCREEN_WIDTH = SPRITE_SIZE * SCREEN_GRID_TILE_WIDTH
 SCREEN_HEIGHT = SPRITE_SIZE * SCREEN_GRID_TILE_HEIGHT
 SCREEN_TITLE = "Lode Runner RL"
 
-REWARD_GOAL = 150
+REWARD_GOAL = 60
 REWARD_DEFAULT = -1
 REWARD_STUCK = -6
 REWARD_IMPOSSIBLE = -60
@@ -58,7 +58,7 @@ class Environment:
         lines = text.strip().split('\n')
         self.height = len(lines)
         self.width = len(lines[0])
-        self.starting_point = (None, None)
+        self.starting_point = (0, 0)
         self.keys = []
         self.exit = []
         self.keys_taken = 0
@@ -86,9 +86,9 @@ class Environment:
 
         if new_state in self.states:
             # calculer la récompense
-            if self.states[new_state] in ['_']:
+            if self.states[new_state] == '_':
                 reward = REWARD_STUCK
-            elif self.states[new_state] in ['c']:
+            elif self.states[new_state] == 'c':
                 self.states[new_state] = " "
                 self.keys_taken += 1
                 reward = REWARD_GOAL
@@ -194,17 +194,17 @@ class MyGame(arcade.Window):
 
         for state in self.agent.environment.states:
             if self.agent.environment.states[state] == '_':
-                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png")
+                sprite = arcade.Sprite(":resources:images/tiles/dirtCenter.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.walls.append(sprite)
             elif self.agent.environment.states[state] == 'c':
-                sprite = arcade.Sprite(":resources:images/items/keyYellow.png")
+                sprite = arcade.Sprite(":resources:images/items/keyYellow.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.keys.append(sprite)
             elif self.agent.environment.states[state] == '#':
-                sprite = arcade.Sprite(":resources:images/items/ladderMid.png")
+                sprite = arcade.Sprite(":resources:images/items/ladderMid.png", 0.5)
                 sprite.center_x = state[1] * sprite.width + sprite.width * 0.5
                 sprite.center_y = self.height - (state[0] * sprite.width + sprite.width * 0.5)
                 self.ladders.append(sprite)
@@ -233,7 +233,7 @@ class MyGame(arcade.Window):
 
     def on_draw(self):
         arcade.start_render()
-        self.grounds.draw()
+        self.walls.draw()
         self.ladders.draw()
         self.keys.draw()
         self.player.draw()
