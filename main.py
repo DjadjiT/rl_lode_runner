@@ -46,12 +46,6 @@ __________
 class Environment:
     def __init__(self, text):
         self.states = {}
-        self.height = 0
-        self.width = 0
-        self.starting_point = (None, None)
-        self.keys = []
-        self.exit = []
-        self.keys_taken = 0
         self.init_env(text)
 
     def init_env(self, text):
@@ -68,21 +62,25 @@ class Environment:
                 self.states[(row, col)] = lines[row][col]
                 if lines[row][col] == 'p':
                     self.starting_point = (row, col)
-                elif lines[row][col] == '*':
-                    self.exit = (row, col)
                 elif lines[row][col] == 'c':
                     self.keys.append((row, col))
 
     def apply(self, state, action):
-        new_state = (0, 0)
-        if action == UP:
+        new_state = state
+        if action == UP and self.states[state] == "#":
             new_state = (state[0] - 1, state[1])
-        elif action == DOWN:
+        elif action == DOWN and self.states[state] == "#":
             new_state = (state[0] + 1, state[1])
         elif action == LEFT:
-            new_state = (state[0], state[1] - 1)
+            if self.states[(state[0] + 1, state[1])] != " ":
+                new_state = (state[0], state[1] - 1)
+            else:
+                new_state = (state[0] + 1, state[1])
         elif action == RIGHT:
-            new_state = (state[0], state[1] + 1)
+            if self.states[(state[0] + 1, state[1])] != " ":
+                new_state = (state[0], state[1] + 1)
+            else:
+                new_state = (state[0] + 1, state[1])
 
         if new_state in self.states:
             # calculer la récompense
@@ -225,6 +223,7 @@ class MyGame(arcade.Window):
                                 - self.player.height * 0.5)
 
     def on_update(self, delta_time):
+        self.physics_engine.update()
         if not self.agent.environment.map_is_done():
             action = self.agent.best_action()
             self.agent.do(action)
