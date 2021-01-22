@@ -34,88 +34,45 @@ _______________
 class Environment:
     def __init__(self, text):
         self.lines = text.strip().split('\n')
-        self.key_found = 0
         self.height = len(self.lines)
         self.width = len(self.lines[0])
-
-        self.actions = [[(i, j) for i in range(self.height)] for j in
-                        range(self.width)]  # Les actions sont toutes les coordonnées possibles
         self.reset()
 
     def reset(self):
-        self.board = [[self.lines[(i, j)] for i in range(self.height)] for j in
-                      range(self.width)]  # On initialise un tableau size * size
-        self.all_keys_found = False
-        self.key_found = 0
+        self.starting_point = (None, None)
+        self.keys = []
+        self.keys_taken = 0
 
+        self.board = [[self.lines[i][j] for i in range(self.height)] for j in range(self.width)]  # On initialise un tableau height * width
 
-    def find_keys(self):
-        '''
-            Identification du vainqueur
-            Retourne le premier vainqueur trouvé (pas de gestion de ex-aequo - ce cas n'est pas supposé arriver)
-            On pourrait coder plus propre...
-        '''
-
-        # Recherche par ligne
-        for line in self.board:
-            if line[0] is not EMPTY and line[0] == "c": #and line.count(line[0]) == self.width:
-                self.key_found += 1
-
-        # Recherche par colonne
-        for j in range(len(self.board)):
-            mark = self.board[0][j]
-            if mark != EMPTY:
-                for i in range(1, len(self.board)):
-                    if self.board[i][j] == "c":
-                        self.key_found += 1
-                    else:
-                        break
-
-        # Et les deux diagonales
-        mark = self.board[0][0]
-        if mark != EMPTY:
-            for i in range(1, len(self.board)):
-                if self.board[i][i] == mark:
-                     self.key_found += 1
-                else:
-                    break
-            if count == self.height:
-                return mark
-
-        mark = self.board[0][self.height - 1]
-        if mark != EMPTY:
-            count = 1
-            for i in range(1, len(self.board)):
-                if self.board[i][self.height - i - 1] == mark:
-                    count += 1
-                else:
-                    break
-            if count == self.height:
-                return mark
-
-        return None
+        for row in range(self.height):
+            for col in range(len(self.board[row])):
+                if self.board[row][col] == 'p':
+                    self.starting_point = (row, col)
+                elif self.board[row][col] == 'c':
+                    self.keys.append((row, col))
 
     def apply(self, action):
-        '''
-        Paramètres :
-            action : coordonnées de la case jouée au format (i,j)
-            player : joueur qui joue l'action, permet d'inscrire sa marque ("X" ou "O" par exemple)
-        '''
-        i, j = int(action / DEFAULT_BOARD_SIZE), action % DEFAULT_BOARD_SIZE  # On convertit l'action en coordonnées (ligne, colonne)
-        reward = REWARD_DEFAULT
-        if self.board[i][j] is EMPTY:
-            self.board[i][j] = player.mark
-            winner_mark = self.find_winner()
-            self.game_over = winner_mark not in [EMPTY, None]
-            if winner_mark == player.mark:
+        i, j = int(action/self.width), action%self.height
+
+        if (i, j) in self.states:
+            # calculer la récompense
+            if self.board[(i, j)] in ['_', '#']:
+                reward = REWARD_STUCK
+            elif self.board[(i, j)] in ['c']:
+                self.board[(i, j)] = " "
+                self.keys_taken += 1
                 reward = REWARD_KEY
-            elif self.game_over:
-                reward = REWARD_LOST
+            else:
+                reward = REWARD_DEFAULT
         else:
+            # Etat impossible: grosse pénalité
             reward = REWARD_FORBIDDEN
 
         return reward
 
+    def map_is_done(self):
+        return self.keys_taken == len(self.keys)
 
 class Agent:
     def __init__(self, environment):
@@ -170,7 +127,7 @@ class Policy:
                                 solver='sgd',
                                 learning_rate_init=self.learning_rate,
                                 warm_start=True)
-        self.actions = list(range(environment.heigth * environment.width))  # Crée une liste de size*size actions
+        self.actions = list(range(environment.width * environment.height))  # Crée une liste de size*size actions
         self.noise = NOISE_INIT
 
         # On initialise le ANN avec 9 entrées, 9 sorties
@@ -204,7 +161,7 @@ class Policy:
 def game_turn(environment, agent, verbose=False):
     environment.reset()
     agent.reset()
-    while not environment.game_over:
+    while not environment.map_is_done():
         action = agent.best_action()
         agent.do(action)
         agent.update_policy()
@@ -213,7 +170,7 @@ def game_turn(environment, agent, verbose=False):
 
 
 if __name__ == "__main__":
-    environment = Environment()
+    environment = Environment(MAZE)
     ##    environment.board[0][2] = 'o'
     ##    environment.board[1][1] = 'o'
     ##    environment.board[2][0] = 'o'

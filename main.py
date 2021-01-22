@@ -335,3 +335,45 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+    def find_key(self):
+        '''
+            Identification du vainqueur
+            Retourne le premier vainqueur trouvé (pas de gestion de ex-aequo - ce cas n'est pas supposé arriver)
+            On pourrait coder plus propre...
+        '''
+
+        # Recherche par ligne
+        for line in self.board:
+            if line[0] == "c": #and line.count(line[0]) == self.width:
+                return True
+
+        # Recherche par colonne
+        for j in range(len(self.board)):
+            env = self.board[0][j]
+            if env != "c":
+                for i in range(1, len(self.board)):
+                    if self.board[i][j] == "c":
+                        return True
+                    else:
+                        break
+
+        # Et les deux diagonales
+        env = self.board[0][0]
+        if env != "c":
+            for i in range(1, len(self.board)):
+                if self.board[i][i] == "c":
+                    return True
+                else:
+                    break
+
+        env = self.board[0][self.height - 1]
+        if env != "c":
+            for i in range(1, len(self.board)):
+                if self.board[i][self.height - i - 1] == "c":
+                    return True
+                else:
+                    break
+
+        return False
